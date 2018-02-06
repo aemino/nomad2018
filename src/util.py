@@ -3,24 +3,23 @@ from keras.models import Sequential
 from keras.optimizers import Adam
 from keras.utils import multi_gpu_model
 from keras import backend as K
+from keras.backend import tensorflow_backend as T
 import numpy as np
 import pandas as pd
 import os
 import random as rn
 from sklearn.preprocessing import MinMaxScaler
+import sys
 import tensorflow as tf
 
-def seed_randomness(seed):
-	os.environ['PYTHONHASHSEED'] = str(seed)
-	np.random.seed(seed)
-	rn.seed(seed)
+def create_custom_session():
+	session_conf = tf.ConfigProto(allow_soft_placement=True)
+	session_conf.gpu_options.per_process_gpu_memory_fraction = 0.5
+	session_conf.gpu_options.allow_growth = True
 
-	session_conf = tf.ConfigProto(intra_op_parallelism_threads=1, inter_op_parallelism_threads=1)
-
-	tf.set_random_seed(seed)
-
-	sess = tf.Session(graph=tf.get_default_graph(), config=session_conf)
+	sess = tf.Session(config=session_conf)
 	K.set_session(sess)
+	return sess
 
 def preprocess_data():
 	train = pd.read_csv('data/train.csv')
@@ -68,3 +67,27 @@ def build_net(activation='tanh', loss='msle', layers=[16] * 128, lr=0.002, input
 	model.compile(optimizer=optimizer, loss=loss)
 
 	return model
+
+def display_progress(progress, total, bar_length=50, final=False):
+	percent = (progress / total)
+	fill_length = int(percent * bar_length)
+	bar = '=' * fill_length
+	arrow = '>' if fill_length < bar_length else ''
+	bar_remain = '.' * (bar_length - fill_length)
+	end = '\n' if final else '\r'
+
+	sys.stdout.write(
+		'[%s%s%s] - %0.2f%s [%s/%s]%s' % (bar, arrow, bar_remain, percent * 100, '%', progress, total, end))
+	sys.stdout.flush()
+
+class ProgressBar():
+	def __init__(self, total, bar_length=50):
+		self.total = total
+		self.bar_length = bar_length
+		self.progress = 0
+	
+	def increment(self):
+		self.progress += 1
+	
+	def display(self):
+		display_progress(self.progress, self.total, final=(self.progress == self.total))

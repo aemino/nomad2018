@@ -6,7 +6,7 @@ from util import preprocess_data, build_net
 
 import matplotlib
 matplotlib.use('Agg')
-import matplotlib.pyplot
+import matplotlib.pyplot as plt
 
 num_perms = 50
 num_runs = 50
