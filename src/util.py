@@ -51,7 +51,7 @@ def build_net(activation='tanh', loss='msle', layers=[16] * 128, lr=0.002, input
 	with tf.device('/cpu:0'):
 		model = Sequential()
 
-		model.add(Dense(layers.pop(0), input_dim=input_dim))
+		model.add(Dense(layers.pop(0), activation=activation, input_dim=input_dim))
 
 		for i, units in enumerate(layers):
 			model.add(Dense(units, activation=activation))

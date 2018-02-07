@@ -3,6 +3,7 @@ from keras.callbacks import EarlyStopping
 import keras.backend as K
 import numpy as np
 import os
+import pandas as pd
 import random as rn
 from util import preprocess_data, build_net, create_custom_session, ProgressBar
 
@@ -14,14 +15,15 @@ os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
 
 gpus = int(os.environ['NUM_GPUS'])
 
-population_size = 20
+population_size = 50
 population_retain_fraction = 0.4
+population_stagnation_gens = 10
 mutate_chance = 0.2
 fitness_runs = 5
 
 gene_schema = [
 	# neurons
-	(1, 1024),
+	(1, 256),
 
 	# layers
 	(1, 256),
@@ -106,6 +108,10 @@ class Population():
 		self.population = [Genetics() for i in range(population_size)]
 		self.generation = 0
 		self.avg_losses = []
+		self.lowest_avg_loss = None
+		self.lowest_avg_loss_gen = 0
+		self.lowest_avg_loss_data = None
+		self.stagnant = False
 	
 	def evolve(self):
 		print('Evolving generation %s' % (self.generation))
@@ -118,6 +124,15 @@ class Population():
 
 		avg_loss = sum(nplosses[:,0].tolist()) / float(len(losses))
 		self.avg_losses.append(avg_loss)
+		
+		if self.lowest_avg_loss == None or avg_loss < self.lowest_avg_loss:
+			self.lowest_avg_loss = avg_loss
+			self.lowest_avg_loss_gen = self.generation
+
+			del self.lowest_avg_loss_data
+			self.lowest_avg_loss_data = [[row[0], *(row[1].genes.props)] for row in losses]
+			print(self.lowest_avg_loss_data)
+
 		print('Average loss for generation %s: %s' % (self.generation, avg_loss))
 
 		nplosses = nplosses[nplosses[:,0].argsort()]
@@ -135,18 +150,28 @@ class Population():
 
 		self.update_graph()
 
+		if self.generation - self.lowest_avg_loss >= population_stagnation_gens:
+			self.stagnant = True
+
 		gc.collect()
 	
 	def update_graph(self):
 		plt.figure(figsize=(15, 10))
 		plt.subplot(2, 1, 1)
-		plt.title('num. layers')
+		plt.title('num. generations vs avg. loss')
 		plt.plot(self.avg_losses, label='loss')
 
 		plt.savefig('graph.png')
 		plt.close()
 
 population = Population()
-while True:
+while not population.stagnant:
 	population.evolve()
+
+print('Population has reached an optimal state with an avg. loss of %0.5f' % (population.lowest_avg_loss))
+
+pop_data = np.array(population.lowest_avg_loss_data)
+columns = ['avg_loss', 'neurons', 'layers', 'lr', 'bse']
+pop_df = pd.DataFrame({columns[i]: pop_data[:,i] for i in range(len(columns))})
+pop_df.to_csv('lowest_avg_loss_pop.csv', index=False)
 
