@@ -131,7 +131,6 @@ class Population():
 
 			del self.lowest_avg_loss_data
 			self.lowest_avg_loss_data = [[row[0], *(row[1].genes.props)] for row in losses]
-			print(self.lowest_avg_loss_data)
 
 		print('Average loss for generation %s: %s' % (self.generation, avg_loss))
 
