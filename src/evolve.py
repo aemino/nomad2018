@@ -40,7 +40,7 @@ train, test, targets, transform_feats, feats, all_data, x_train, y_train, x_test
 class Genetics():
 	def __init__(self, parents=None, props=None):
 		if parents != None:
-			props = self.combine(parents)
+			props = self.mutate(self.combine(parents))
 
 		if props == None:
 			props = self.gen_rand_props()
