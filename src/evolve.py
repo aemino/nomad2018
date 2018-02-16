@@ -23,10 +23,10 @@ fitness_runs = 5
 
 gene_schema = [
 	# neurons
-	(1, 256),
+	(1, 512),
 
 	# layers
-	(1, 256),
+	(1, 128),
 
 	# lr
 	(0.001, 0.01),
@@ -36,6 +36,12 @@ gene_schema = [
 ]
 
 train, test, targets, transform_feats, feats, all_data, x_train, y_train, x_test = preprocess_data()
+
+def save_population(pop_data, gen_id):
+	pop_data = np.array(pop_data)
+	columns = ['avg_loss', 'neurons', 'layers', 'lr', 'bse']
+	pop_df = pd.DataFrame({columns[i]: pop_data[:,i] for i in range(len(columns))})
+	pop_df.to_csv('out/gen_%s.csv' % (gen_id), index=False)
 
 class Genetics():
 	def __init__(self, parents=None, props=None):
@@ -62,14 +68,14 @@ class Genetics():
 	def combine(self, genes):
 		return [rn.choice(props) for props in zip(*map(lambda g: g.props, genes))]
 
-	def mutate(self):
-		if rn.random() < mutation_factor:
-			new_props = list(self.props)
+	def mutate(self, props):
+		if rn.random() < mutate_chance:
+			new_props = list(props)
 			mut_ind = rn.randint(0, len(new_props))
-			new_props[mut_ind] = self.gen_rand_prop(genetic_props[mut_ind])
+			new_props[mut_ind] = self.gen_rand_prop(gene_schema[mut_ind])
 			return new_props
 
-		return self.props
+		return props
 
 class Network():
 	def __init__(self, genes):
@@ -124,13 +130,17 @@ class Population():
 
 		avg_loss = sum(nplosses[:,0].tolist()) / float(len(losses))
 		self.avg_losses.append(avg_loss)
+
+		pop_data = [[row[0], *(row[1].genes.props)] for row in losses]
 		
 		if self.lowest_avg_loss == None or avg_loss < self.lowest_avg_loss:
 			self.lowest_avg_loss = avg_loss
 			self.lowest_avg_loss_gen = self.generation
 
 			del self.lowest_avg_loss_data
-			self.lowest_avg_loss_data = [[row[0], *(row[1].genes.props)] for row in losses]
+			self.lowest_avg_loss_data = pop_data
+		
+		save_population(pop_data, self.generation)
 
 		print('Average loss for generation %s: %s' % (self.generation, avg_loss))
 
@@ -169,8 +179,5 @@ while not population.stagnant:
 
 print('Population has reached an optimal state with an avg. loss of %0.5f' % (population.lowest_avg_loss))
 
-pop_data = np.array(population.lowest_avg_loss_data)
-columns = ['avg_loss', 'neurons', 'layers', 'lr', 'bse']
-pop_df = pd.DataFrame({columns[i]: pop_data[:,i] for i in range(len(columns))})
-pop_df.to_csv('lowest_avg_loss_pop.csv', index=False)
+save_population(population.lowest_avg_loss_data, 'best')
 

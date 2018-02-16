@@ -1,6 +1,7 @@
-from keras.layers import Dense
+from keras.layers import AlphaDropout, Dense, LeakyReLU
 from keras.models import Sequential
 from keras.optimizers import Adam
+from keras.regularizers import l2
 from keras.utils import multi_gpu_model
 from keras import backend as K
 from keras.backend import tensorflow_backend as T
@@ -25,39 +26,74 @@ def preprocess_data():
 	train = pd.read_csv('data/train.csv')
 	test = pd.read_csv('data/test.csv')
 
-	targets = ['formation_energy_ev_natom', 'bandgap_energy_ev']
-	transform_feats = ['spacegroup', 'number_of_total_atoms', 'percent_atom_al',
+	def calc_vol(dataset):
+		a = dataset['lattice_vector_1_ang']
+		b = dataset['lattice_vector_2_ang']
+		c = dataset['lattice_vector_3_ang']
+
+		alpha = np.radians(dataset['lattice_angle_alpha_degree'])
+		beta = np.radians(dataset['lattice_angle_beta_degree'])
+		gamma = np.radians(dataset['lattice_angle_gamma_degree'])
+
+		return a * b * c * np.sqrt(
+			1 + 2 * np.cos(alpha) * np.cos(beta) * np.cos(gamma)
+			- np.cos(alpha) ** 2
+			- np.cos(beta) ** 2
+			- np.cos(gamma) ** 2)
+
+	train['vol'] = calc_vol(train)
+	test['vol'] = calc_vol(test)
+
+	all_columns = ['id', 'spacegroup', 'number_of_total_atoms', 'percent_atom_al',
 		'percent_atom_ga', 'percent_atom_in', 'lattice_vector_1_ang',
 		'lattice_vector_2_ang', 'lattice_vector_3_ang', 'lattice_angle_alpha_degree',
-		'lattice_angle_beta_degree', 'lattice_angle_gamma_degree']
-	feats = transform_feats
+		'lattice_angle_beta_degree', 'lattice_angle_gamma_degree', 'vol',
+		'formation_energy_ev_natom', 'bandgap_energy_ev']
+	targets = ['formation_energy_ev_natom', 'bandgap_energy_ev']
+	transform_feats = ['number_of_total_atoms', 'percent_atom_al',
+		'percent_atom_ga', 'percent_atom_in', 'lattice_vector_1_ang',
+		'lattice_vector_2_ang', 'lattice_vector_3_ang', 'lattice_angle_alpha_degree',
+		'lattice_angle_beta_degree', 'lattice_angle_gamma_degree', 'vol']
+	feats = ['spacegroup'] + transform_feats
 
-	all_data = pd.concat([train[transform_feats], test])
+	drop_feats = [f for f in all_columns if f not in feats]
+
+	all_data = pd.concat([train[feats], test])
 
 	scaler = MinMaxScaler()
 	scaler.fit(all_data[transform_feats])
 
+	print(train.head())
+
 	train[transform_feats] = scaler.transform(train[transform_feats])
 	test[transform_feats] = scaler.transform(test[transform_feats])
 
-	x_train = train.drop(['id'] + targets, axis=1)
+	x_train = train.drop(drop_feats, axis=1)
 	y_train = np.log1p(train[targets])
+
+	print(x_train.head())
+	print(y_train.head())
 
 	x_test = test.drop(['id'], axis=1)
 
 	return train, test, targets, transform_feats, feats, all_data, x_train, y_train, x_test
 
-def build_net(activation='tanh', loss='msle', layers=[16] * 128, lr=0.002, input_dim=None, output_dim=None, gpus=None):
+def build_net(loss='msle', layers=[16] * 128, lr=0.002, input_dim=None, output_dim=None, gpus=None):
 	with tf.device('/cpu:0'):
 		model = Sequential()
 
-		model.add(Dense(layers.pop(0), activation=activation, input_dim=input_dim))
+		model.add(Dense(layers.pop(0), input_dim=input_dim))
+		model.add(LeakyReLU(alpha=0.001))
+		model.add(AlphaDropout(0.1))
 
 		for i, units in enumerate(layers):
-			model.add(Dense(units, activation=activation))
+			model.add(Dense(units, kernel_regularizer=l2(0.00001)))
+			model.add(LeakyReLU(alpha=0.001))
+			model.add(AlphaDropout(0.1))
 
-		# output laye
+		# output layer
 		model.add(Dense(output_dim))
+		model.add(LeakyReLU(alpha=0.001))
 
 	optimizer = Adam(lr=lr)
 
