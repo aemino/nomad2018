@@ -1,5 +1,6 @@
 data/
 graphs/
+submission.csv
 
 .DS_Store
 **/__pycache__/
