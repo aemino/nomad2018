@@ -1,4 +1,4 @@
-from keras.layers import AlphaDropout, Dense, LeakyReLU
+from keras.layers import Dense, Dropout, PReLU
 from keras.models import Sequential
 from keras.optimizers import Adam
 from keras.regularizers import l2
@@ -40,20 +40,26 @@ def preprocess_data():
 			- np.cos(alpha) ** 2
 			- np.cos(beta) ** 2
 			- np.cos(gamma) ** 2)
+	
+	def calc_density(dataset):
+		return dataset['number_of_total_atoms'] / dataset['volume']
 
-	train['vol'] = calc_vol(train)
-	test['vol'] = calc_vol(test)
+	train['volume'] = calc_vol(train)
+	test['volume'] = calc_vol(test)
+
+	train['density'] = calc_density(train)
+	test['density'] = calc_density(test)
 
 	all_columns = ['id', 'spacegroup', 'number_of_total_atoms', 'percent_atom_al',
 		'percent_atom_ga', 'percent_atom_in', 'lattice_vector_1_ang',
 		'lattice_vector_2_ang', 'lattice_vector_3_ang', 'lattice_angle_alpha_degree',
-		'lattice_angle_beta_degree', 'lattice_angle_gamma_degree', 'vol',
+		'lattice_angle_beta_degree', 'lattice_angle_gamma_degree', 'volume', 'density',
 		'formation_energy_ev_natom', 'bandgap_energy_ev']
 	targets = ['formation_energy_ev_natom', 'bandgap_energy_ev']
 	transform_feats = ['number_of_total_atoms', 'percent_atom_al',
 		'percent_atom_ga', 'percent_atom_in', 'lattice_vector_1_ang',
 		'lattice_vector_2_ang', 'lattice_vector_3_ang', 'lattice_angle_alpha_degree',
-		'lattice_angle_beta_degree', 'lattice_angle_gamma_degree', 'vol']
+		'lattice_angle_beta_degree', 'lattice_angle_gamma_degree', 'volume', 'density']
 	feats = ['spacegroup'] + transform_feats
 
 	drop_feats = [f for f in all_columns if f not in feats]
@@ -83,17 +89,17 @@ def build_net(loss='msle', layers=[16] * 128, lr=0.002, input_dim=None, output_d
 		model = Sequential()
 
 		model.add(Dense(layers.pop(0), input_dim=input_dim))
-		model.add(LeakyReLU(alpha=0.001))
-		model.add(AlphaDropout(0.1))
+		model.add(PReLU())
+		model.add(Dropout(0.1))
 
 		for i, units in enumerate(layers):
-			model.add(Dense(units, kernel_regularizer=l2(0.00001)))
-			model.add(LeakyReLU(alpha=0.001))
-			model.add(AlphaDropout(0.1))
+			model.add(Dense(units, kernel_regularizer=l2(0.0001)))
+			model.add(PReLU())
+			model.add(Dropout(0.1))
 
 		# output layer
 		model.add(Dense(output_dim))
-		model.add(LeakyReLU(alpha=0.001))
+		model.add(PReLU())
 
 	optimizer = Adam(lr=lr)
 

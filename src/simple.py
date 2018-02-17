@@ -15,9 +15,6 @@ class LossHistory(Callback):
 	
 	def on_epoch_end(self, batch, logs={}):
 		loss = logs.get('loss')
-		if loss > 0.03:
-			return
-
 		self.losses.append(loss)
 
 history = LossHistory()
@@ -26,12 +23,17 @@ layers = [128] * 8
 
 model = build_net(layers=layers, input_dim=x_train.shape[1], output_dim=y_train.shape[1], lr=0.001, loss='mse')
 
-early_stopping = EarlyStopping(monitor='loss', patience=100)
+early_stopping = EarlyStopping(monitor='loss', patience=50)
 model.fit(x=x_train, y=y_train, epochs=2000, callbacks=[history, early_stopping])
 
 y_predict = model.predict(x_train)
 
 test_predict = np.expm1(model.predict(x_test))
+
+# values below 0 are invalid
+test_predict[test_predict[:, 0] < 0, 0] = 0
+test_predict[test_predict[:, 1] < 0, 1] = 0
+
 columns = targets
 predictions = pd.DataFrame({columns[i]: test_predict[:,i] for i in range(len(columns))})
 predictions.insert(loc=0, column='id', value=list(range(1, len(test_predict) + 1)))
